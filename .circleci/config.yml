@@ -1,0 +1,91 @@
+version: 2.1
+
+workflows:
+  main:
+    jobs:
+      - test:
+          name: test_node_6
+          node_version: 6.14.4
+      - test:
+          name: test_node_8
+          node_version: 8.12.0
+      - test:
+          name: test_node_10
+          node_version: 10.10.0
+      - deploy:
+          requires:
+            - test_node_6
+            - test_node_8
+            - test_node_10
+          filters:
+            branches:
+              only:
+                - master
+
+executors:
+  default:
+    parameters: &node_version_parameters
+      node_version:
+        type: enum
+        enum: ["10.10.0", "8.12.0", "6.14.4"]
+
+    working_directory: ~/work/circleci-21
+    docker:
+      - image: circleci/node:<< parameters.node_version >>
+        environment:
+          LANG: ja_JP.UTF-8
+
+jobs:
+  test:
+    parameters: *node_version_parameters
+    executor:
+      name: default
+      node_version: << parameters.node_version >>
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ .Branch }}-{{ checksum "yarn.lock" }}
+            - v1-dependencies-{{ .Branch }}-
+            - v1-dependencies-
+
+      - run:
+          name: Install dependencies
+          command: yarn install
+
+      - save_cache:
+          key: v1-dependencies-{{ .Branch }}-{{ checksum "yarn.lock" }}
+          paths:
+            - node_modules
+
+      - run:
+          name: Check diff (yarn.lock)
+          command: git diff --exit-code
+      
+      - run:
+          name: Run Test
+          command: yarn test
+
+  deploy:
+    executor:
+      name: default
+      node_version: 8.12.0
+    steps:
+      - checkout
+      - restore_cache:
+          keys:
+            - v1-dependencies-{{ .Branch }}-{{ checksum "yarn.lock" }}
+            - v1-dependencies-{{ .Branch }}-
+            - v1-dependencies-
+
+      - run:
+          name: Install dependencies
+          command: yarn
+
+      - run:
+          name: Build Application
+          command: yarn build
+      
+      - run:
+          name: Deploy Application
+          command: echo "some deploy script..."
